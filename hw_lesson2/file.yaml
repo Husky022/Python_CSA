@@ -1,0 +1,13 @@
+first_key:
+- item1
+- item2
+- item3
+- item4
+- item5
+second_key: 777
+third_key:
+  £: item1
+  ¥: item2
+  ©: item3
+  ®: item4
+  µ: item5

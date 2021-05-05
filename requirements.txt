@@ -1,0 +1,6 @@
+Package    Version
+---------- -------
+-ip        20.2.3
+pip        20.1.1
+PyYAML     5.4.1
+setuptools 56.0.0
