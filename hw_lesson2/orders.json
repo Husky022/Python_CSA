@@ -1,0 +1,18 @@
+{
+    "orders": [
+        {
+            "item": "Куртка",
+            "quantity": 4,
+            "price": 150,
+            "buyer": "Sam",
+            "date": "Wed May  5 15:42:43 2021"
+        },
+        {
+            "item": "Кроссовки",
+            "quantity": 2,
+            "price": 250,
+            "buyer": "Lola",
+            "date": "Wed May  5 15:43:07 2021"
+        }
+    ]
+}
