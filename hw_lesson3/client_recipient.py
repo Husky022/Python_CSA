@@ -5,6 +5,7 @@ import pickle
 s = socket(AF_INET, SOCK_STREAM)
 s.connect(('localhost', 7777))
 
+
 def send_presence():
     return {
             "action": "presence",
@@ -15,6 +16,7 @@ def send_presence():
                     "status":      "Yep, I am here!"
             }
     }
+
 
 def authenticate():
     return {

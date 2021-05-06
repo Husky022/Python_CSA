@@ -18,6 +18,7 @@ def client_presence():
     }
     client.send(pickle.dumps(response))
 
+
 def client_authenticate():
     global response
     if not client_auth.get(msg['user']['account_name']):
@@ -38,6 +39,7 @@ def client_authenticate():
         }
     client.send(pickle.dumps(response))
 
+
 def client_quit():
     global response
     client_auth[msg['user']['account_name']] = False
@@ -47,6 +49,7 @@ def client_quit():
         "alert": 'Пользователь вышел'
     }
     client.send(pickle.dumps(response))
+
 
 def user_to_user_message():
     client = clients[msg['to']]
