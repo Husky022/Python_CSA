@@ -1,59 +1,63 @@
 from socket import *
 import time
 import pickle
+import threading
 
-s = socket(AF_INET, SOCK_STREAM)
-s.connect(('localhost', 7777))
-
-
-def send_presence():
-    return {
-            "action": "presence",
-            "time": time.ctime(),
-            "type": "status",
-            "user": {
-                    "account_name":  "Edisson",
-                    "status":      "Yep, I am here!"
-            }
-    }
-
-
-def authenticate():
-    return {
-        "action": "authenticate",
-        "time": time.ctime(),
-        "user": {
-                "account_name":  "Edisson",
-                "password":      "CorrectHorseBatteryStaple"
-            }
-    }
+client = socket(AF_INET, SOCK_STREAM)
+client.connect(('localhost', 7777))
 
 
 def quit():
-    return {
-        "action": "quit",
+    request['action'] = 'quit'
+    return request
+
+
+def request_available_users():
+    request['action'] = 'available_users'
+    return request
+
+def request_available_commands():
+    request['action'] = 'available_commands'
+    return request
+
+def listen_server():
+    while True:
+        data = pickle.loads(client.recv(2048))
+        print(data, '\n')
+
+
+def start_client():
+    global request
+    listen_thread = threading.Thread(target=listen_server)
+    listen_thread.start()
+    username = input('Введите имя:')
+    request = {
+        "action": "authenticate",
         "time": time.ctime(),
         "user": {
-                "account_name":  "Edisson",
-                "password":      "CorrectHorseBatteryStaple"
-            }
+            "account_name": username,
+            "password": ''
+        }
     }
+    client.send(pickle.dumps(request))
+
+    while True:
+        request = {
+            "action": '',
+            "time": time.ctime()
+        }
+        print()
+        client_message = input('Send message/command or Press /help:::')
+        if client_message.lower() == '/help':
+            client.send(pickle.dumps(request_available_commands()))
+        elif client_message.lower() == '/quit':
+            client.send(pickle.dumps(quit()))
+        elif client_message.lower() == '/users':
+            client.send(pickle.dumps(request_available_users()))
+        else:
+            request['action'], request['message']  = 'msg', client_message
+            client.send(pickle.dumps(request))
 
 
-def send_to_other_client():
-    return {
-        "action": "msg",
-        "time": time.ctime(),
-        "to": "Tesla",
-        "from": "Edisson",
-        "message": "Привет, человечище!"
-    }
-
-
-# action = send_presence()
-# action = authenticate()
-action = send_to_other_client()
-s.send(pickle.dumps(action))
-data = s.recv(1024)
-print('Сообщение от сервера: ', pickle.loads(data))
-s.close()
+if __name__ == '__main__':
+    start_client()

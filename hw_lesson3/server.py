@@ -2,81 +2,111 @@ from socket import *
 import pickle
 import time
 
-s = socket(AF_INET, SOCK_STREAM)
-s.bind(('', 7777))
-s.listen(3)
+import threading
 
-client_auth = {} # Эмуляция бд с полем для аутентификации пользователя
+
+server = socket(AF_INET, SOCK_STREAM)
+server.bind(('', 7777))
+server.listen(3)
+
 clients = {}
 
 
-def client_presence():
-    global response
-    response = {
-        "response": 200,
-        "time": time.ctime()
-    }
-    client.send(pickle.dumps(response))
+def client_quit(cur_user):
+    for k, v in clients.items():
+        if v == cur_user:
+            del clients[k]
+            break
+    response['response'], response['resp_msg'], = '200', 'Пользователь вышел'
+    return response
 
 
-def client_authenticate():
-    global response
-    if not client_auth.get(msg['user']['account_name']):
-        client_auth[msg['user']['account_name']] = True
-        clients[msg['user']['account_name']] = client
+def send_message(msg, cur_user):
+    if cur_user not in clients.values():
+        response = {
+            "response": '401',
+            "time": time.ctime(),
+            "resp_msg": 'Для авторизации нажмите /auth',
+            "alert": 'Не авторизован'
+        }
+        cur_user.send(pickle.dumps(response))
+    else:
+        for k, v in clients.items():
+            if v == cur_user:
+                from_user = k
+                break
+        if msg['message'].startswith('@'):
+            to_user = msg['message'][1:].split().pop(0)
+            msg.update(dict(from_user=from_user, to=to_user))
+            clients[to_user].send(pickle.dumps(msg))
+        else:
+            msg.update(dict(from_user=from_user, to='All'))
+            for k in clients:
+                if clients[k] != cur_user:
+                    clients[k].send(pickle.dumps(msg))
+        response = {
+            "response": '200',
+            "time": time.ctime(),
+            "resp_msg": 'Отправлено',
+            "alert": ''
+        }
+        cur_user.send(pickle.dumps(response))
+
+
+def client_available_users():
+    response['response'] = '200'
+    response['resp_msg'] = list(clients.keys())
+    return response
+
+
+def client_available_commands():
+    response['response'] = '200'
+    response['resp_msg'] = 'Доступные комманды:\n/quit - выход\n' \
+                           '/users - список пользователей\nдля отправки сообщения конкретному' \
+                           ' пользователю\nиспользуйте конструкцию ::::@USER_NAME YOUR_MESSAGE'
+    return response
+
+
+def client_authenticate(msg, user):
+    if not clients.get(msg['user']['account_name']):
+        clients[msg['user']['account_name']] = user
         print(clients)
-        response = {
-            "response": 200,
-            "time": time.ctime(),
-            "alert": 'Авторизация прошла успешно'
-        }
+        response['response'], response['alert'], = '200', 'Авторизация прошла успешно'
     else:
-        # Здесь должна быть проверка пароля
-        response = {
-            "response": 409,
-            "time": time.ctime(),
-            "alert": "Данный пользователь уже авторизован"
-        }
-    client.send(pickle.dumps(response))
+        response['response'], response['alert'], = '409', 'Данный пользователь уже авторизован'
+    return response
 
-
-def client_quit():
+def listen_user(user):
     global response
-    client_auth[msg['user']['account_name']] = False
-    response = {
-        "response": 200,
-        "time": time.ctime(),
-        "alert": 'Пользователь вышел'
-    }
-    client.send(pickle.dumps(response))
-
-
-def user_to_user_message():
-    client = clients[msg['to']]
-    client.send(pickle.dumps(msg))
-
-
-actions = {
-    'presence': client_presence,
-    'authenticate': client_authenticate,
-    'quit': client_quit,
-    'msg': user_to_user_message
-
-}
-
-while True:
-    client, addr = s.accept()
-    print("Получен запрос на соединение от %s" % str(addr))
-    print(client)
-    msg = pickle.loads(client.recv(1024))
-    print(msg)
-    if not actions.get(msg['action']):
+    while True:
         response = {
-            "response": 400,
+            "response": '',
             "time": time.ctime(),
-            "alert": "Неправильный запрос/JSON-объект"
+            "resp_msg": '',
+            "alert": ''
         }
-        client.send(pickle.dumps(response))
-    else:
-        actions.get(msg['action'])()
+        data = pickle.loads(user.recv(2048))
+        print(data)
+        if data['action'] == 'authenticate':
+            user.send(pickle.dumps(client_authenticate(data, user)))
+        elif data['action'] == 'available_commands':
+            user.send(pickle.dumps(client_available_commands()))
+        elif data['action'] == 'msg':
+            user.send(pickle.dumps(send_message(data, user)))
+        elif data['action'] == 'available_users':
+            user.send(pickle.dumps(client_available_users()))
+        elif data['action'] == 'quit':
+            user.send(pickle.dumps(client_quit(user)))
+        print()
 
+
+def start_server():
+    while True:
+        client, addr = server.accept()
+        print("Connected %s" % str(addr))
+        listen_accepted_user = threading.Thread(target=listen_user, args=(client,))
+        listen_accepted_user.start()
+
+
+if __name__ == '__main__':
+    start_server()
