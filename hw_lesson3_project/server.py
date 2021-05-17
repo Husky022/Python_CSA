@@ -1,8 +1,13 @@
 from socket import *
 import pickle
 import time
-
+import sys
 import threading
+
+
+sys.path.append("../hw_lesson5_log/")
+
+import server_log_config
 
 
 server = socket(AF_INET, SOCK_STREAM)
@@ -15,6 +20,7 @@ clients = {}
 def client_quit(cur_user):
     for k, v in clients.items():
         if v == cur_user:
+            logger.info(f'{clients[k]} вышел')
             del clients[k]
             break
     response['response'], response['resp_msg'], = '200', 'Пользователь вышел'
@@ -29,6 +35,7 @@ def send_message(msg, cur_user):
             "resp_msg": 'Для авторизации нажмите /auth',
             "alert": 'Не авторизован'
         }
+        logger.error(f'Ошибка авторизации при отправке сообщения {cur_user}')
         cur_user.send(pickle.dumps(response))
     else:
         for k, v in clients.items():
@@ -39,11 +46,13 @@ def send_message(msg, cur_user):
             to_user = msg['message'][1:].split().pop(0)
             msg.update(dict(from_user=from_user, to=to_user))
             clients[to_user].send(pickle.dumps(msg))
+            logger.info(f'Отправлено сообщение от {from_user} к {to_user}')
         else:
             msg.update(dict(from_user=from_user, to='All'))
             for k in clients:
                 if clients[k] != cur_user:
                     clients[k].send(pickle.dumps(msg))
+            logger.info(f'Отправлено сообщение от {from_user} в общий чат')
         response = {
             "response": '200',
             "time": time.ctime(),
@@ -72,8 +81,10 @@ def client_authenticate(msg, user):
         clients[msg['user']['account_name']] = user
         print(clients)
         response['response'], response['alert'], = '200', 'Авторизация прошла успешно'
+        logger.info(f'Пользователь {user} авторизован')
     else:
         response['response'], response['alert'], = '409', 'Данный пользователь уже авторизован'
+        logger.warning(f'Ошибка авторизации. Повторная авторизация пользователя {user}')
     return response
 
 def listen_user(user):
@@ -99,10 +110,13 @@ def listen_user(user):
             user.send(pickle.dumps(client_quit(user)))
         print()
 
-
 def start_server():
+    global logger
+    logger = server_log_config.get_logger(__name__)
+    logger.info('Сервер запущен')
     while True:
         client, addr = server.accept()
+        logger.info(f'Подключен клиент {client} {addr}')
         print("Connected %s" % str(addr))
         listen_accepted_user = threading.Thread(target=listen_user, args=(client,))
         listen_accepted_user.start()

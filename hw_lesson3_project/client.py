@@ -2,6 +2,11 @@ from socket import *
 import time
 import pickle
 import threading
+import sys
+
+
+sys.path.append("../hw_lesson5_log/")
+import client_log_config
 
 client = socket(AF_INET, SOCK_STREAM)
 client.connect(('localhost', 7777))
@@ -27,7 +32,9 @@ def listen_server():
 
 
 def start_client():
-    global request
+    global request, logger
+    logger = client_log_config.get_logger(__name__)
+    logger.info(f'Клиент {client} запущен')
     listen_thread = threading.Thread(target=listen_server)
     listen_thread.start()
     username = input('Введите имя:')
@@ -56,6 +63,7 @@ def start_client():
             client.send(pickle.dumps(request_available_users()))
         else:
             request['action'], request['message']  = 'msg', client_message
+            logger.info(f'Клиент {client} отправил сообщение {client_message}')
             client.send(pickle.dumps(request))
 
 
