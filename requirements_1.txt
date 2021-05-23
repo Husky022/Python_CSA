@@ -1,0 +1,16 @@
+bidict
+certifi
+chardet
+dnspython
+easygui
+eventlet
+greenlet
+idna
+pip
+python-engineio
+python-socketio
+PyYAML
+requests
+setuptools
+six
+urllib3
