@@ -7,10 +7,10 @@ client = socket(AF_INET, SOCK_STREAM)
 client.connect(('localhost', 7777))
 
 
+
 def quit():
     request['action'] = 'quit'
     return request
-
 
 def request_available_users():
     request['action'] = 'available_users'
@@ -31,6 +31,8 @@ def start_client():
     listen_thread = threading.Thread(target=listen_server)
     listen_thread.start()
     username = input('Введите имя:')
+    while not username:
+        username = input('Имя не может быть пустым! Введите имя:')
     request = {
         "action": "authenticate",
         "time": time.ctime(),
@@ -59,5 +61,5 @@ def start_client():
             client.send(pickle.dumps(request))
 
 
-if __name__ == '__main__':
-    start_client()
+# if __name__ == '__main__':
+start_client()
