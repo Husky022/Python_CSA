@@ -8,9 +8,6 @@ import sys
 sys.path.append("../hw_lesson5_log/")
 import client_log_config
 
-client = socket(AF_INET, SOCK_STREAM)
-client.connect(('localhost', 7777))
-
 
 def quit():
     request['action'] = 'quit'
@@ -32,7 +29,9 @@ def listen_server():
 
 
 def start_client():
-    global request, logger
+    global request, logger, client
+    client = socket(AF_INET, SOCK_STREAM)
+    client.connect(('localhost', 7777))
     logger = client_log_config.get_logger(__name__)
     logger.info(f'Клиент {client} запущен')
     listen_thread = threading.Thread(target=listen_server)

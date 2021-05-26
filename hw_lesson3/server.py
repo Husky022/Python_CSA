@@ -3,20 +3,30 @@ import pickle
 import time
 import sys
 import threading
+from functools import wraps
+import inspect
+
+
 
 
 sys.path.append("../hw_lesson5_log/")
-
 import server_log_config
 
+DEBUG = True
 
-server = socket(AF_INET, SOCK_STREAM)
-server.bind(('', 7777))
-server.listen(3)
+# def mockable(func):
+#     @wraps(func)
+#     def wrapper(*args,**kwargs):
+#         func_name = func.__name__ + '_mock' if DEBUG else func.__name__
+#         # f = getattr(sys.modules['__main__'], func_name)
+#         # print(*inspect.getmembers(sys.modules['__main__'], inspect.isfunction), sep='\n')
+#         # print(f)
+#         # print(globals()[func_name])
+#         return func
+#     return wrapper()
 
-clients = {}
 
-
+@server_log_config.log
 def client_quit(cur_user):
     for k, v in clients.items():
         if v == cur_user:
@@ -27,6 +37,8 @@ def client_quit(cur_user):
     return response
 
 
+@server_log_config.log
+# @mockable
 def send_message(msg, cur_user):
     if cur_user not in clients.values():
         response = {
@@ -62,12 +74,17 @@ def send_message(msg, cur_user):
         cur_user.send(pickle.dumps(response))
 
 
+@server_log_config.log
+def send_message_mock(msg, cur_user):
+    print(f'Тестовое сообщение {msg["message"]} от пользователя {cur_user}')
+
+@server_log_config.log
 def client_available_users():
     response['response'] = '200'
     response['resp_msg'] = list(clients.keys())
     return response
 
-
+@server_log_config.log
 def client_available_commands():
     response['response'] = '200'
     response['resp_msg'] = 'Доступные комманды:\n/quit - выход\n' \
@@ -75,7 +92,7 @@ def client_available_commands():
                            ' пользователю\nиспользуйте конструкцию ::::@USER_NAME YOUR_MESSAGE'
     return response
 
-
+@server_log_config.log
 def client_authenticate(msg, user):
     if not clients.get(msg['user']['account_name']):
         clients[msg['user']['account_name']] = user
@@ -87,6 +104,8 @@ def client_authenticate(msg, user):
         logger.warning(f'Ошибка авторизации. Повторная авторизация пользователя {user}')
     return response
 
+
+@server_log_config.log
 def listen_user(user):
     global response
     while True:
@@ -110,8 +129,14 @@ def listen_user(user):
             user.send(pickle.dumps(client_quit(user)))
         print()
 
+
+@server_log_config.log
 def start_server():
-    global logger
+    global logger, clients
+    server = socket(AF_INET, SOCK_STREAM)
+    server.bind(('', 7777))
+    server.listen(3)
+    clients = {}
     logger = server_log_config.get_logger(__name__)
     logger.info('Сервер запущен')
     while True:
