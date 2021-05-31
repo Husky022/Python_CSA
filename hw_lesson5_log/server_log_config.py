@@ -16,7 +16,8 @@ def log(func):
 
 
 def get_file_handler_rotation():
-    app_log_hand_rotation = TimedRotatingFileHandler('../hw_lesson5_log/server_logs/logfile-server.txt', encoding='utf-8', when="s", interval=15)
+    app_log_hand_rotation = TimedRotatingFileHandler('../hw_lesson5_log/server_logs/logfile-server.txt',
+                                                     encoding='utf-8', when="h", interval=24)
     app_log_hand_rotation.setFormatter(format)
     return app_log_hand_rotation
 
