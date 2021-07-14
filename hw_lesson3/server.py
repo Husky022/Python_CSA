@@ -25,6 +25,12 @@ DEBUG = True
 #         return func
 #     return wrapper()
 
+response = {
+    "response": '',
+    "time": time.ctime(),
+    "resp_msg": '',
+    "alert": ''
+}
 
 @server_log_config.log
 def client_quit(cur_user):
@@ -41,7 +47,7 @@ def client_quit(cur_user):
 # @mockable
 def send_message(msg, cur_user):
     if cur_user not in clients.values():
-        response = {
+        return {
             "response": '401',
             "time": time.ctime(),
             "resp_msg": 'Для авторизации нажмите /auth',
@@ -56,22 +62,31 @@ def send_message(msg, cur_user):
                 break
         if msg['message'].startswith('@'):
             to_user = msg['message'][1:].split().pop(0)
+            msg['message'] = ' '.join(msg['message'][1:].split()[1:])
             msg.update(dict(from_user=from_user, to=to_user))
-            clients[to_user].send(pickle.dumps(msg))
-            logger.info(f'Отправлено сообщение от {from_user} к {to_user}')
+            try:
+                clients[to_user].send(pickle.dumps(msg))
+                logger.info(f'Отправлено сообщение от {from_user} к {to_user}')
+        except KeyError:
+                return {
+                    "response": '404',
+                    "time": time.ctime(),
+                    "resp_msg": 'Не отправлено. Такого получателя не существует',
+                    "alert": ''
+                }
         else:
             msg.update(dict(from_user=from_user, to='All'))
             for k in clients:
                 if clients[k] != cur_user:
                     clients[k].send(pickle.dumps(msg))
+
             logger.info(f'Отправлено сообщение от {from_user} в общий чат')
-        response = {
+        return {
             "response": '200',
             "time": time.ctime(),
             "resp_msg": 'Отправлено',
             "alert": ''
         }
-        cur_user.send(pickle.dumps(response))
 
 
 @server_log_config.log
@@ -80,9 +95,12 @@ def send_message_mock(msg, cur_user):
 
 @server_log_config.log
 def client_available_users():
-    response['response'] = '200'
-    response['resp_msg'] = list(clients.keys())
-    return response
+    return {
+        "response": '200',
+        "time": time.ctime(),
+        "resp_msg": list(clients.keys()),
+        "alert": ''
+    }
 
 @server_log_config.log
 def client_available_commands():
@@ -104,7 +122,7 @@ def client_authenticate(msg, user):
         logger.warning(f'Ошибка авторизации. Повторная авторизация пользователя {user}')
     return response
 
-
+  
 @server_log_config.log
 def listen_user(user):
     global response

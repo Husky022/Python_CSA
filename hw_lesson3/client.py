@@ -68,6 +68,8 @@ def start_client():
     global request
     get_connect()
     username = input('Введите имя:')
+    while not username:
+        username = input('Имя не может быть пустым! Введите имя:')
     request = {
         "action": "authenticate",
         "time": time.ctime(),
@@ -88,5 +90,5 @@ def start_client():
         send_request(client_message)
 
 
-if __name__ == '__main__':
-    start_client()
+# if __name__ == '__main__':
+start_client()
