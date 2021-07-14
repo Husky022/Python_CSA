@@ -1,17 +1,24 @@
 from socket import *
 import time
 import pickle
-import threading
+from threading import Thread, Lock
 import sys
 
 
 sys.path.append("../hw_lesson5_log/")
 import client_log_config
 
+locker = Lock()
 
-def quit():
-    request['action'] = 'quit'
-    return request
+
+def get_connect():
+    global client, logger
+    client = socket(AF_INET, SOCK_STREAM)
+    client.connect(('localhost', 7777))
+    logger = client_log_config.get_logger(__name__)
+    logger.info(f'Клиент {client} запущен')
+    listen_thread = Thread(target=listen_server)
+    listen_thread.start()
 
 
 def request_available_users():
@@ -23,19 +30,43 @@ def request_available_commands():
     return request
 
 def listen_server():
+    global data
     while True:
-        data = pickle.loads(client.recv(2048))
-        print(data, '\n')
+        try:
+            data = pickle.loads(client.recv(2048))
+        except ConnectionAbortedError:
+            print('Отключение от сервера')
+            sys.exit()
+        try:
+            print(data['alert'])
+        except:
+            pass
+        try:
+            print(data['resp_msg'])
+        except:
+            pass
+        try:
+            print(f'Cообщение от {data["from_user"]}: {data["message"]}')
+        except:
+            pass
 
+
+def send_request(request_message):
+    if request_message.lower() == '/help':
+        client.send(pickle.dumps(request_available_commands()))
+    elif request_message.lower() == '/quit':
+        client.close()
+        sys.exit()
+    elif request_message.lower() == '/users':
+        client.send(pickle.dumps(request_available_users()))
+    else:
+        request['action'], request['message'] = 'msg', request_message
+        logger.info(f'Клиент {client} отправил сообщение {request_message}')
+        client.send(pickle.dumps(request))
 
 def start_client():
-    global request, logger, client
-    client = socket(AF_INET, SOCK_STREAM)
-    client.connect(('localhost', 7777))
-    logger = client_log_config.get_logger(__name__)
-    logger.info(f'Клиент {client} запущен')
-    listen_thread = threading.Thread(target=listen_server)
-    listen_thread.start()
+    global request
+    get_connect()
     username = input('Введите имя:')
     request = {
         "action": "authenticate",
@@ -46,24 +77,15 @@ def start_client():
         }
     }
     client.send(pickle.dumps(request))
-
     while True:
         request = {
             "action": '',
             "time": time.ctime()
         }
         print()
-        client_message = input('Send message/command or Press /help:::')
-        if client_message.lower() == '/help':
-            client.send(pickle.dumps(request_available_commands()))
-        elif client_message.lower() == '/quit':
-            client.send(pickle.dumps(quit()))
-        elif client_message.lower() == '/users':
-            client.send(pickle.dumps(request_available_users()))
-        else:
-            request['action'], request['message']  = 'msg', client_message
-            logger.info(f'Клиент {client} отправил сообщение {client_message}')
-            client.send(pickle.dumps(request))
+        time.sleep(0.2)
+        client_message = input('\nSend message/command or Press /help:::')
+        send_request(client_message)
 
 
 if __name__ == '__main__':
