@@ -42,10 +42,7 @@ def write_responses(requests, w_clients, all_clients):
                    sock.send(pickle.dumps(send_message(data, sock)))
                elif data['action'] == 'available_users':
                    sock.send(pickle.dumps(client_available_users()))
-               elif data['action'] == 'quit':
-                   sock.send(pickle.dumps(client_quit(sock)))
-               print()
-           except:  # Сокет недоступен, клиент отключился
+           except:
                print('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
                del all_clients[sock]
                sock.close()
@@ -79,10 +76,11 @@ def start_server():
            if requests:
                write_responses(requests, w, clients)
 
+
+
 @server_log_config.log
-def client_quit(cur_user):
-    del clients[cur_user]
-    response['response'], response['resp_msg'], = '200', 'Пользователь вышел'
+def client_quit():
+    response['response'], response['resp_msg'], = '200', 'Выход'
     return response
 
 
@@ -97,7 +95,6 @@ def send_message(msg, cur_user):
             "alert": 'Не авторизован'
         }
         logger.error(f'Ошибка авторизации при отправке сообщения {cur_user}')
-        cur_user.send(pickle.dumps(response))
     else:
         for k, v in clients.items():
             if k == cur_user:
@@ -105,24 +102,39 @@ def send_message(msg, cur_user):
                 break
         if msg['message'].startswith('@'):
             to_user = msg['message'][1:].split().pop(0)
-            msg.update(dict(from_user=from_user, to=to_user))
-            for k, v in clients.items():
-                if v == to_user:
-                    k.send(pickle.dumps(msg))
-            logger.info(f'Отправлено сообщение от {from_user} к {to_user}')
+            if to_user in clients.values():
+                msg.update(dict(from_user=from_user, to=to_user))
+                for k, v in clients.items():
+                    if v == to_user:
+                        k.send(pickle.dumps(msg))
+                logger.info(f'Отправлено сообщение от {from_user} к {to_user}')
+                response = {
+                    "response": '200',
+                    "time": time.ctime(),
+                    "resp_msg": f'Отправлено пользователю {to_user}',
+                    "alert": ''
+                }
+            else:
+                response = {
+                    "response": '404',
+                    "time": time.ctime(),
+                    "resp_msg": '',
+                    "alert": f'Ошибка. Пользователя {to_user} нет в сети'
+                }
+                logger.error(f'Ошибка отправки сообщения от {cur_user}. Пользователя {to_user} нет в сети')
         else:
             msg.update(dict(from_user=from_user, to='All'))
             for k in clients:
                 if k != cur_user:
                     k.send(pickle.dumps(msg))
             logger.info(f'Отправлено сообщение от {from_user} в общий чат')
-        response = {
-            "response": '200',
-            "time": time.ctime(),
-            "resp_msg": 'Отправлено',
-            "alert": ''
-        }
-        cur_user.send(pickle.dumps(response))
+            response = {
+                "response": '200',
+                "time": time.ctime(),
+                "resp_msg": 'Отправлено в общий чат',
+                "alert": ''
+            }
+    cur_user.send(pickle.dumps(response))
 
 
 @server_log_config.log
@@ -132,7 +144,7 @@ def send_message_mock(msg, cur_user):
 @server_log_config.log
 def client_available_users():
     response['response'] = '200'
-    response['resp_msg'] = list(clients.values())
+    response['resp_msg'] = f'Пользователи в сети: {list(clients.values())}'
     return response
 
 @server_log_config.log
