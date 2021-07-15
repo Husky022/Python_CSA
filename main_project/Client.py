@@ -5,6 +5,16 @@ import sys
 import time
 
 
+class VerifyMeta(type):
+    def __init__(self, clsname, bases, clsdict):
+        print(dir(self))
+        # key = "send_data"
+        # if key not in clsdict.keys():
+        #     raise TypeError(f'Отсуствует функция {key}')
+
+        type.__init__(self, clsname, bases, clsdict)
+
+
 class Client(Socket):
     def __init__(self):
         super(Client, self).__init__()

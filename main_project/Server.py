@@ -4,7 +4,18 @@ import pickle
 import time
 from logs import Logger
 
-class Server(Socket):
+
+class VerifyMeta(type):
+    def __init__(self, clsname, bases, clsdict):
+        print(dir(self))
+        # key = "send_data"
+        # if key not in clsdict.keys():
+        #     raise TypeError(f'Отсуствует функция {key}')
+
+        type.__init__(self, clsname, bases, clsdict)
+
+
+class Server(Socket, metaclass=VerifyMeta):
     def __init__(self):
         super(Server, self).__init__()
         print('Server is ready')
