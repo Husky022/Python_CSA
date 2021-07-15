@@ -1,0 +1,151 @@
+import select
+from Socket import Socket
+import pickle
+import time
+from logs import Logger
+
+class Server(Socket):
+    def __init__(self):
+        super(Server, self).__init__()
+        print('Server is ready')
+        self.clients = {}
+        # self.logger = Logger.Logger.log(__name__)
+
+
+    def set_up(self):
+        self.bind(('', 7777))
+        self.listen(5)
+        self.settimeout(0.2)
+        while True:
+            try:
+                client, addr = self.accept()
+            except OSError as e:
+                pass
+            else:
+                print("Connected %s" % str(addr))
+                self.clients[client] = ''
+            finally:
+                wait = 10
+                r = []
+                w = []
+                try:
+                    r, w, e = select.select(list(self.clients.keys()), list(self.clients.keys()), [], wait)
+                except:
+                    pass
+                requests = self.listen_socket(r, self.clients)
+                if requests:
+                    self.write_responses(requests, w, self.clients)
+
+    def listen_socket(self, r_clients, all_clients):
+        requests = {}
+        for sock in r_clients:
+            try:
+                data = pickle.loads(sock.recv(1024))
+                requests[sock] = data
+            except:
+                print('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
+                del all_clients[sock]
+        return requests
+
+    def write_responses(self, requests, w_clients, all_clients):
+        response = {
+            "response": '',
+            "time": time.ctime(),
+            "resp_msg": '',
+            "alert": ''
+        }
+        for sock in w_clients:
+            if sock in requests:
+                try:
+                    data = requests[sock]
+                    print(data)
+                    if data['action'] == 'authenticate':
+                        sock.send(pickle.dumps(self.client_authenticate(data, sock, response)))
+                    elif data['action'] == 'available_commands':
+                        sock.send(pickle.dumps(self.client_available_commands(response)))
+                    elif data['action'] == 'msg':
+                        sock.send(pickle.dumps(self.send_data(data, sock, response)))
+                    elif data['action'] == 'available_users':
+                        sock.send(pickle.dumps(self.client_available_users(response)))
+                except:
+                    print('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
+                    # self.logger.info(f'Отключен пользователь {all_clients[sock]}')
+                    del all_clients[sock]
+                    sock.close()
+
+    def send_data(self, msg, cur_user, resp):
+        if cur_user not in self.clients:
+            resp = {
+                "response": '401',
+                "time": time.ctime(),
+                "resp_msg": 'Для авторизации нажмите /auth',
+                "alert": 'Не авторизован'
+            }
+            # self.logger.error(f'Ошибка авторизации при отправке сообщения {cur_user}')
+        else:
+            for k, v in self.clients.items():
+                if k == cur_user:
+                    from_user = v
+                    break
+            if msg['message'].startswith('@'):
+                to_user = msg['message'][1:].split().pop(0)
+                if to_user in self.clients.values():
+                    msg.update(dict(from_user=from_user, to=to_user))
+                    for k, v in self.clients.items():
+                        if v == to_user:
+                            k.send(pickle.dumps(msg))
+                    # self.logger.info(f'Отправлено сообщение от {from_user} к {to_user}')
+                    resp = {
+                        "response": '200',
+                        "time": time.ctime(),
+                        "resp_msg": f'Отправлено пользователю {to_user}',
+                        "alert": ''
+                    }
+                else:
+                    resp = {
+                        "response": '404',
+                        "time": time.ctime(),
+                        "resp_msg": '',
+                        "alert": f'Ошибка. Пользователя {to_user} нет в сети'
+                    }
+                    # self.logger.error(f'Ошибка отправки сообщения от {cur_user}. Пользователя {to_user} нет в сети')
+            else:
+                msg.update(dict(from_user=from_user, to='All'))
+                for k in self.clients:
+                    if k != cur_user:
+                        k.send(pickle.dumps(msg))
+                # self.logger.info(f'Отправлено сообщение от {from_user} в общий чат')
+                resp = {
+                    "response": '200',
+                    "time": time.ctime(),
+                    "resp_msg": 'Отправлено в общий чат',
+                    "alert": ''
+                }
+        cur_user.send(pickle.dumps(resp))
+
+    def client_authenticate(self, msg, user, resp):
+        if not self.clients.get(user):
+            self.clients[user] = msg['user']['account_name']
+            print(self.clients)
+            resp['response'], resp['alert'], = '200', 'Авторизация прошла успешно'
+            # self.logger.info(f'Пользователь {user} авторизован')
+        else:
+            resp['response'], resp['alert'], = '409', 'Данный пользователь уже авторизован'
+            # self.logger.warning(f'Ошибка авторизации. Повторная авторизация пользователя {user}')
+        return resp
+
+    def client_available_commands(self, resp):
+        resp['response'] = '200'
+        resp['resp_msg'] = 'Доступные комманды:\n/quit - выход\n' \
+                               '/users - список пользователей\nдля отправки сообщения конкретному' \
+                               ' пользователю\nиспользуйте конструкцию ::::@USER_NAME YOUR_MESSAGE'
+        return resp
+
+    def client_available_users(self, resp):
+        resp['response'] = '200'
+        resp['resp_msg'] = f'Пользователи в сети: {list(self.clients.values())}'
+        return resp
+
+if __name__ == '__main__':
+    server = Server()
+    server.set_up()

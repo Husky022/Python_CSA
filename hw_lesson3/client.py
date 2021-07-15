@@ -3,10 +3,10 @@ import time
 import pickle
 from threading import Thread, Lock
 import sys
-
+import client_log_config
 
 sys.path.append("../hw_lesson5_log/")
-import client_log_config
+
 
 locker = Lock()
 

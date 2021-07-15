@@ -85,7 +85,7 @@ def client_quit():
 
 
 @server_log_config.log
-# @mockable
+
 def send_message(msg, cur_user):
     if cur_user not in clients:
         response = {
