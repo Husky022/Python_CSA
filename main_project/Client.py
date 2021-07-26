@@ -3,19 +3,32 @@ from threading import Thread
 import pickle
 import sys
 import time
+import dis
+import inspect
+import socket
 
 
-class VerifyMeta(type):
-    def __init__(self, clsname, bases, clsdict):
-        print(dir(self))
-        # key = "send_data"
-        # if key not in clsdict.keys():
-        #     raise TypeError(f'Отсуствует функция {key}')
-
-        type.__init__(self, clsname, bases, clsdict)
+def find_forbidden_methods_call(func, method_names):
+    for instr in dis.get_instructions(func):
+        if instr.opname == 'LOAD_METHOD' and instr.argval in method_names:
+            return instr.argval
 
 
-class Client(Socket):
+class ClientVerify(type):
+    forbidden_method_names = ('connect')
+
+    def __new__(cls, name, bases, class_dict):
+        for _, value in class_dict.items():
+            if inspect.isfunction(value):
+                method_name = find_forbidden_methods_call(value, cls.forbidden_method_names)
+                if method_name:
+                    raise ValueError(f'called forbidden method "{method_name}"')
+            elif isinstance(value, socket.socket):
+                raise ValueError('Socket object cannot be defined in class definition')
+        return type.__new__(cls, name, bases, class_dict)
+
+
+class Client(Socket, metaclass=ClientVerify):
     def __init__(self):
         super(Client, self).__init__()
 

@@ -1,5 +1,5 @@
 import sqlalchemy
-from sqlalchemy import  create_engine, Table, Column, Integer, String, MetaData, ForeignKey, DateTime
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, ForeignKey, DateTime
 from sqlalchemy.orm import mapper, sessionmaker
 import select
 from Socket import Socket
@@ -7,7 +7,9 @@ import pickle
 import time
 from logs import Logger
 from datetime import datetime
-
+import dis
+import inspect
+import socket
 
 engine = create_engine('sqlite:///data.db', echo=True)
 
@@ -16,25 +18,26 @@ pool_recycle = 7200
 metadata = MetaData()
 
 users_table = Table('users', metadata,
-    Column('id', Integer, primary_key=True),
-    Column('nickname', String),
-    Column('password', String)
-)
+                    Column('id', Integer, primary_key=True),
+                    Column('nickname', String),
+                    Column('password', String)
+                    )
 
 users_history_table = Table('history', metadata,
-    Column('id', Integer, primary_key=True),
-    Column('user_id', ForeignKey('users.id')),
-    Column('ip_address', String),
-    Column('last_time', DateTime)
-)
+                            Column('id', Integer, primary_key=True),
+                            Column('user_id', ForeignKey('users.id')),
+                            Column('ip_address', String),
+                            Column('last_time', DateTime)
+                            )
 
 users_contacts = Table('contacts', metadata,
-    Column('id', Integer, primary_key=True),
-    Column('user_id', ForeignKey('users.id')),
-    Column('id_contact', ForeignKey('users.id'))
-)
+                       Column('id', Integer, primary_key=True),
+                       Column('user_id', ForeignKey('users.id')),
+                       Column('id_contact', ForeignKey('users.id'))
+                       )
 
 metadata.create_all(engine)
+
 
 # Таблицы БД
 
@@ -43,11 +46,13 @@ class User:
         self.nickname = nickname
         self.password = password
 
+
 class History:
     def __init__(self, user_id, ip_address, last_time):
         self.user_id = user_id
         self.ip_address = ip_address
         self.last_time = last_time
+
 
 class Contacts:
     def __init__(self, user_id, id_contact):
@@ -60,32 +65,54 @@ h = mapper(History, users_history_table)
 c = mapper(Contacts, users_contacts)
 
 
-# class VerifyMeta(type):
-#     def __init__(self, clsname, bases, clsdict):
-#         print(dir(self))
-#         # key = "send_data"
-#         # if key not in clsdict.keys():
-#         #     raise TypeError(f'Отсуствует функция {key}')
-#
-#         type.__init__(self, clsname, bases, clsdict)
-#
-#
-# class ServerVerifier(metaclass=VerifyMeta):
-#     pass
+def find_forbidden_methods_call(func, method_names):
+    for instr in dis.get_instructions(func):
+        if instr.opname == 'LOAD_METHOD' and instr.argval in method_names:
+            return instr.argval
 
 
-class Server(Socket):
+class ServerVerify(type):
+    forbidden_method_names = ('connect')
+
+    def __new__(cls, name, bases, class_dict):
+        for _, value in class_dict.items():
+            if inspect.isfunction(value):
+                method_name = find_forbidden_methods_call(value, cls.forbidden_method_names)
+                if method_name:
+                    raise ValueError(f'called forbidden method "{method_name}"')
+            elif isinstance(value, socket.socket):
+                raise ValueError('Socket object cannot be defined in class definition')
+        return type.__new__(cls, name, bases, class_dict)
+
+
+class PortValidator:
+
+    def __init__(self, default=7777):
+        self.default = default
+        self._value = None
+
+    def __get__(self, instance, owner):
+        return self._value or self.default
+
+    def __set__(self, instance, value):
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError('Incorrect port (Must be integer and positive)')
+        self._value = value
+
+
+class Server(Socket, metaclass=ServerVerify):
+    port = PortValidator()
+
     def __init__(self):
         super(Server, self).__init__()
-        print('Server is ready')
         self.clients = {}
         # self.logger = Logger.Logger.log(__name__)
 
-
-    def set_up(self):
-        self.bind(('', 7777))
+    def set_up(self, socket_port):
+        self.bind(('', socket_port))
         self.listen(5)
         self.settimeout(0.2)
+        print('Server is ready')
         while True:
             try:
                 client, addr = self.accept()
@@ -117,7 +144,7 @@ class Server(Socket):
                 Session = sessionmaker()
                 Session.configure(bind=engine)
                 session = Session()
-                session.add(History("example_user_id", str(sock.getpeername()), datetime.now())) # user_id для примера
+                session.add(History("example_user_id", str(sock.getpeername()), datetime.now()))  # user_id для примера
                 session.commit()
                 del all_clients[sock]
         return requests
@@ -147,7 +174,8 @@ class Server(Socket):
                     Session = sessionmaker()
                     Session.configure(bind=engine)
                     session = Session()
-                    session.add(History("example_user_id", str(sock.getpeername()), datetime.now()))  # user_id для примера
+                    session.add(
+                        History("example_user_id", str(sock.getpeername()), datetime.now()))  # user_id для примера
                     session.commit()
                     self.logger.info(f'Отключен пользователь {all_clients[sock]}')
                     del all_clients[sock]
@@ -227,8 +255,8 @@ class Server(Socket):
     def client_available_commands(self, resp):
         resp['response'] = '200'
         resp['resp_msg'] = 'Доступные комманды:\n/quit - выход\n' \
-                               '/users - список пользователей\nдля отправки сообщения конкретному' \
-                               ' пользователю\nиспользуйте конструкцию ::::@USER_NAME YOUR_MESSAGE'
+                           '/users - список пользователей\nдля отправки сообщения конкретному' \
+                           ' пользователю\nиспользуйте конструкцию ::::@USER_NAME YOUR_MESSAGE'
         return resp
 
     def client_available_users(self, resp):
@@ -236,7 +264,10 @@ class Server(Socket):
         resp['resp_msg'] = f'Пользователи в сети: {list(self.clients.values())}'
         return resp
 
+
 if __name__ == '__main__':
     print("Версия SQLAlchemy:", sqlalchemy.__version__)
     server = Server()
-    server.set_up()
+    # server.port = 0
+    print(f'Server.port = {server.port}')
+    server.set_up(server.port)

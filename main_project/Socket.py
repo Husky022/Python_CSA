@@ -1,17 +1,7 @@
 from socket import socket, AF_INET, SOCK_STREAM
 
 
-class VerifyMeta(type):
-    def __init__(self, clsname, bases, clsdict):
-        # print(clsdict)
-        # for key, value in clsdict.items():
-        #     if hasattr(key, "send_data"):
-        #         raise TypeError('Ошибочка')
-
-        type.__init__(self, clsname, bases, clsdict)
-
-
-class Socket(socket, metaclass=VerifyMeta):
+class Socket(socket):
 
     def __init__(self):
         super(Socket, self).__init__(
