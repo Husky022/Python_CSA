@@ -1,21 +1,80 @@
+import sqlalchemy
+from sqlalchemy import  create_engine, Table, Column, Integer, String, MetaData, ForeignKey, DateTime
+from sqlalchemy.orm import mapper, sessionmaker
 import select
 from Socket import Socket
 import pickle
 import time
 from logs import Logger
+from datetime import datetime
 
 
-class VerifyMeta(type):
-    def __init__(self, clsname, bases, clsdict):
-        print(dir(self))
-        # key = "send_data"
-        # if key not in clsdict.keys():
-        #     raise TypeError(f'Отсуствует функция {key}')
+engine = create_engine('sqlite:///data.db', echo=True)
 
-        type.__init__(self, clsname, bases, clsdict)
+pool_recycle = 7200
+
+metadata = MetaData()
+
+users_table = Table('users', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('nickname', String),
+    Column('password', String)
+)
+
+users_history_table = Table('history', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', ForeignKey('users.id')),
+    Column('ip_address', String),
+    Column('last_time', DateTime)
+)
+
+users_contacts = Table('contacts', metadata,
+    Column('id', Integer, primary_key=True),
+    Column('user_id', ForeignKey('users.id')),
+    Column('id_contact', ForeignKey('users.id'))
+)
+
+metadata.create_all(engine)
+
+# Таблицы БД
+
+class User:
+    def __init__(self, nickname, password):
+        self.nickname = nickname
+        self.password = password
+
+class History:
+    def __init__(self, user_id, ip_address, last_time):
+        self.user_id = user_id
+        self.ip_address = ip_address
+        self.last_time = last_time
+
+class Contacts:
+    def __init__(self, user_id, id_contact):
+        self.user_id = user_id
+        self.id_contact = id_contact
 
 
-class Server(Socket, metaclass=VerifyMeta):
+u = mapper(User, users_table)
+h = mapper(History, users_history_table)
+c = mapper(Contacts, users_contacts)
+
+
+# class VerifyMeta(type):
+#     def __init__(self, clsname, bases, clsdict):
+#         print(dir(self))
+#         # key = "send_data"
+#         # if key not in clsdict.keys():
+#         #     raise TypeError(f'Отсуствует функция {key}')
+#
+#         type.__init__(self, clsname, bases, clsdict)
+#
+#
+# class ServerVerifier(metaclass=VerifyMeta):
+#     pass
+
+
+class Server(Socket):
     def __init__(self):
         super(Server, self).__init__()
         print('Server is ready')
@@ -55,6 +114,11 @@ class Server(Socket, metaclass=VerifyMeta):
                 requests[sock] = data
             except:
                 print('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
+                Session = sessionmaker()
+                Session.configure(bind=engine)
+                session = Session()
+                session.add(History("example_user_id", str(sock.getpeername()), datetime.now())) # user_id для примера
+                session.commit()
                 del all_clients[sock]
         return requests
 
@@ -80,7 +144,12 @@ class Server(Socket, metaclass=VerifyMeta):
                         sock.send(pickle.dumps(self.client_available_users(response)))
                 except:
                     print('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
-                    # self.logger.info(f'Отключен пользователь {all_clients[sock]}')
+                    Session = sessionmaker()
+                    Session.configure(bind=engine)
+                    session = Session()
+                    session.add(History("example_user_id", str(sock.getpeername()), datetime.now()))  # user_id для примера
+                    session.commit()
+                    self.logger.info(f'Отключен пользователь {all_clients[sock]}')
                     del all_clients[sock]
                     sock.close()
 
@@ -102,6 +171,11 @@ class Server(Socket, metaclass=VerifyMeta):
                 to_user = msg['message'][1:].split().pop(0)
                 if to_user in self.clients.values():
                     msg.update(dict(from_user=from_user, to=to_user))
+                    Session = sessionmaker()
+                    Session.configure(bind=engine)
+                    session = Session()
+                    session.add(Contacts("example_from_user_id", "example_to_user_id"))  # user_id для примера
+                    session.commit()
                     for k, v in self.clients.items():
                         if v == to_user:
                             k.send(pickle.dumps(msg))
@@ -139,6 +213,11 @@ class Server(Socket, metaclass=VerifyMeta):
             self.clients[user] = msg['user']['account_name']
             print(self.clients)
             resp['response'], resp['alert'], = '200', 'Авторизация прошла успешно'
+            Session = sessionmaker()
+            Session.configure(bind=engine)
+            session = Session()
+            session.add(User(msg['user']['account_name'], "password_example"))
+            session.commit()
             # self.logger.info(f'Пользователь {user} авторизован')
         else:
             resp['response'], resp['alert'], = '409', 'Данный пользователь уже авторизован'
@@ -158,5 +237,6 @@ class Server(Socket, metaclass=VerifyMeta):
         return resp
 
 if __name__ == '__main__':
+    print("Версия SQLAlchemy:", sqlalchemy.__version__)
     server = Server()
     server.set_up()
