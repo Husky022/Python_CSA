@@ -221,21 +221,17 @@ class Server(Socket):
             resp['response'] = '202'
             resp['username'] = msg["user"]["account_name"]
             resp['resp_msg'] = f'С возвращением, {msg["user"]["account_name"]}!\n'
-            print(resp)
             return resp
         else:
             resp['response'] = '201'
             resp['username'] = msg["user"]["account_name"]
             resp['resp_msg'] = f'Добро пожаловать, {msg["user"]["account_name"]}!\n'
-            print(resp)
             return resp
 
 
     def client_authenticate_new(self, msg, user, resp):
         if not self.clients_online.get(user):
-            print('1a')
             self.clients_online[user] = msg['user']['account_name']
-            print(self.clients_online)
             resp['response'], resp['resp_msg'], = '200', 'Авторизация прошла успешно'
             Session = sessionmaker()
             Session.configure(bind=engine)
@@ -249,21 +245,18 @@ class Server(Socket):
         return resp
 
     def client_authenticate_old(self, msg, user, resp):
+        print('client_authenticate_old')
         if not self.clients_online.get(user):
             Session = sessionmaker(bind=engine)
             session = Session()
-            password = session.query(User).filter_by(name=msg['user']['account_name']).first()
-            print(password)
-
-            resp['response'], resp['resp_msg'], = '200', 'Авторизация прошла успешно'
-            Session = sessionmaker()
-            Session.configure(bind=engine)
-            session = Session()
-            session.add(User(msg['user']['account_name'], msg['user']['password']))
-            session.commit()
+            password = (session.query(User).filter_by(nickname=msg['user']['account_name']).first()).password
+            if password == msg['user']['password']:
+                resp['response'], resp['resp_msg'], resp['username'] = '200', 'Авторизация прошла успешно', msg['user']['account_name']
+            else:
+                resp['response'], resp['alert'], resp['username'] = '444', 'Неверный пароль! Повторите попытку!', msg['user']['account_name']
             # self.logger.info(f'Пользователь {user} авторизован')
         else:
-            resp['response'], resp['alert'], = '409', 'Данный пользователь уже авторизован'
+            resp['response'], resp['alert'], resp['username'] = '409', 'Данный пользователь уже авторизован', msg['user']['account_name']
             # self.logger.warning(f'Ошибка авторизации. Повторная авторизация пользователя {user}')
         return resp
 

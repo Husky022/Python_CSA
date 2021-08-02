@@ -23,7 +23,7 @@ class Client(Socket):
     def set_up(self):
         self.connect(('localhost', 7777))
         listen_thread_1 = Thread(target=self.listen_socket)
-        listen_thread_1.start()
+        listen_thread_2 = Thread(target=self.send_message_or_command)
         username = input('Введите имя:')
         while not username:
             username = input('Имя не может быть пустым! Введите имя:')
@@ -36,7 +36,14 @@ class Client(Socket):
             }
         }
         self.send(pickle.dumps(request))
+        listen_thread_1.start()
+        listen_thread_2.start()
+        listen_thread_1.join()
+        listen_thread_2.join()
 
+
+
+    def send_message_or_command(self):
         while True:
             request = {
                 "action": '',
@@ -49,7 +56,6 @@ class Client(Socket):
 
 
     def create_new_user(self, current_user_name):
-        print('новый юзер')
         password_1 = input('Придумайте пароль: ')
         # while True:
         #     print('password_1')
@@ -72,7 +78,6 @@ class Client(Socket):
         return request
 
     def user_authenticate(self, current_user_name):
-        print('старый юзер')
         password = input('Введите пароль: ')
         request = {
             'action': 'authenticate_old',
@@ -97,7 +102,7 @@ class Client(Socket):
                     self.send(pickle.dumps(self.create_new_user(data['username'])))
                 if data['response'] in ['202', '444']:
                     print(data['alert'])
-                    self.user_authenticate(data['username'])
+                    self.send(pickle.dumps(self.user_authenticate(data['username'])))
                 if data['response'] in ['401', '404', '409']:
                     print(data['alert'])
             else:
