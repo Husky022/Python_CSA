@@ -1,5 +1,5 @@
 from Socket import Socket
-from threading import Thread
+from threading import Thread, Lock, Event
 import pickle
 import sys
 import time
@@ -18,7 +18,7 @@ class VerifyMeta(type):
 class Client(Socket):
     def __init__(self):
         super(Client, self).__init__()
-
+        self.event = Event()
 
     def set_up(self):
         self.connect(('localhost', 7777))
@@ -42,31 +42,27 @@ class Client(Socket):
         listen_thread_2.join()
 
 
-
     def send_message_or_command(self):
         while True:
+            self.event.wait()
             request = {
                 "action": '',
                 "time": time.ctime()
             }
-            print()
-            time.sleep(0.2)
             client_message = input('\nSend message/command or Press /help:::')
             self.send_data_to_server(client_message, request)
 
 
     def create_new_user(self, current_user_name):
-        password_1 = input('Придумайте пароль: ')
-        # while True:
-        #     print('password_1')
-        #     password_1 = input('Придумайте пароль:')
-        #     print('password_2')
-        #     password_2 = input('Повторите пароль:')
-        #     print('after password_2')
-        #     if password_1 != password_2:
-        #         print('Пароли не совпадают! Повторите попытку!')
-        #     else:
-        #         break
+        self.event.clear()
+        while True:
+            password_1 = input('Придумайте пароль:')
+            password_2 = input('Повторите пароль:')
+            if password_1 != password_2:
+                print('Пароли не совпадают! Повторите попытку!')
+            else:
+                print('Пароль принят!')
+                break
         request = {
             'action': 'authenticate_new',
             "time": time.ctime(),
@@ -76,6 +72,7 @@ class Client(Socket):
             }
         }
         return request
+
 
     def user_authenticate(self, current_user_name):
         password = input('Введите пароль: ')
@@ -89,16 +86,19 @@ class Client(Socket):
         }
         return request
 
+
     def listen_socket(self):
         while True:
+            self.event.clear()
             data = pickle.loads(self.recv(2048))
             if not data:
                 continue
             elif 'response' in data:
                 if data['response'] == '200':
                     print(data['resp_msg'])
+                    self.event.set()
                 if data['response'] == '201':
-                    print(data)
+                    print(data['resp_msg'])
                     self.send(pickle.dumps(self.create_new_user(data['username'])))
                 if data['response'] in ['202', '444']:
                     print(data['alert'])
@@ -107,7 +107,7 @@ class Client(Socket):
                     print(data['alert'])
             else:
                 print(f'Cообщение от {data["from_user"]}: {data["message"]}')
-
+                self.event.set()
 
 
     def send_data_to_server(self, request_message, request):

@@ -233,8 +233,7 @@ class Server(Socket):
         if not self.clients_online.get(user):
             self.clients_online[user] = msg['user']['account_name']
             resp['response'], resp['resp_msg'], = '200', 'Авторизация прошла успешно'
-            Session = sessionmaker()
-            Session.configure(bind=engine)
+            Session = sessionmaker(bind=engine)
             session = Session()
             session.add(User(msg['user']['account_name'], msg['user']['password']))
             session.commit()
