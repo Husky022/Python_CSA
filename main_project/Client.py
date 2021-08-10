@@ -103,8 +103,11 @@ class Client(Socket):
                 if data['response'] in ['202', '444']:
                     print(data['alert'])
                     self.send(pickle.dumps(self.user_authenticate(data['username'])))
-                if data['response'] in ['401', '404', '409']:
+                if data['response'] in ['401', '409']:
                     print(data['alert'])
+                if data['response'] in ['404']:
+                    print(data['alert'])
+                    self.event.set()
             else:
                 print(f'Cообщение от {data["from_user"]}: {data["message"]}')
                 self.event.set()
@@ -120,6 +123,8 @@ class Client(Socket):
             self.send(pickle.dumps(self.request_available_users(request)))
         elif request_message.lower() == '/contacts':
             self.send(pickle.dumps(self.request_user_contacts(request)))
+        elif request_message.lower().startswith('/del'):
+            self.send(pickle.dumps(self.delete_contact(request, request_message)))
         else:
             request['action'], request['message'] = 'msg', request_message
             # logger.info(f'Клиент {client} отправил сообщение {request_message}')
@@ -137,6 +142,9 @@ class Client(Socket):
         request['action'] = 'available_commands'
         return request
 
+    def delete_contact(self, request, request_message):
+        request['action'] = request_message
+        return request
 
 if __name__ == '__main__':
     client = Client()

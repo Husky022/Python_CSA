@@ -32,25 +32,26 @@ class User(Base):
 class History(Base):
     __tablename__ = 'history'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'))
     ip_address = Column(String)
+    username = Column(String)
     last_time = Column(DateTime)
 
-    def __init__(self, user_id, ip_address, last_time):
-        self.user_id = user_id
+
+    def __init__(self, ip_address, username, last_time):
         self.ip_address = ip_address
+        self.username = username
         self.last_time = last_time
 
 
 class Contacts(Base):
     __tablename__ = 'contacts'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'))
-    id_contact = Column(Integer, ForeignKey('users.id'))
+    username_from = Column(String, ForeignKey('users.nickname'))
+    username_to = Column(String, ForeignKey('users.nickname'))
 
-    def __init__(self, user_id, id_contact):
-        self.user_id = user_id
-        self.id_contact = id_contact
+    def __init__(self, username_from, username_to):
+        self.username_from = username_from
+        self.username_to = username_to
 
 Base.metadata.create_all(engine)
 
@@ -89,7 +90,6 @@ class Server(Socket):
                 pass
             else:
                 print("Connected %s" % str(addr))
-                print(client)
                 self.clients_online[client] = ''
             finally:
                 wait = 10
@@ -103,6 +103,7 @@ class Server(Socket):
                 if requests:
                     self.write_responses(requests, w, self.clients_online)
 
+
     def listen_socket(self, r_clients, all_clients):
         requests = {}
         for sock in r_clients:
@@ -110,14 +111,16 @@ class Server(Socket):
                 data = pickle.loads(sock.recv(1024))
                 requests[sock] = data
             except:
+                outgoing_user = self.clients_online[sock]
                 print('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
                 Session = sessionmaker()
                 Session.configure(bind=engine)
                 session = Session()
-                session.add(History("example_user_id", str(sock.getpeername()), datetime.now())) # user_id для примера
+                session.add(History(outgoing_user, str(sock.getpeername()), datetime.now())) # user_id для примера
                 session.commit()
                 del all_clients[sock]
         return requests
+
 
     def write_responses(self, requests, w_clients, all_clients):
         response = {
@@ -141,19 +144,23 @@ class Server(Socket):
                     elif data['action'] == 'available_users':
                         sock.send(pickle.dumps(self.client_available_users(response)))
                     elif data['action'] == 'get_contacts':
-                        sock.send(pickle.dumps(self.client_contacts(response)))
+                        sock.send(pickle.dumps(self.client_contacts(response, sock)))
                     elif data['action'] == 'identification':
                         sock.send(pickle.dumps(self.client_identification(data, response)))
+                    elif data['action'].startswith('/del'):
+                        sock.send(pickle.dumps(self.client_delete_contact(data, response, sock)))
                 except:
+                    outgoing_user = self.clients_online[sock]
                     print('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
                     Session = sessionmaker()
                     Session.configure(bind=engine)
                     session = Session()
-                    session.add(History("example_user_id", str(sock.getpeername()), datetime.now()))  # user_id для примера
+                    session.add(History(outgoing_user, str(sock.getpeername()), datetime.now()))  # user_id для примера
                     session.commit()
                     # self.logger.info(f'Отключен пользователь {all_clients[sock]}')
                     del all_clients[sock]
                     sock.close()
+
 
     def send_data(self, msg, cur_user):
         if cur_user not in self.clients_online:
@@ -176,8 +183,14 @@ class Server(Socket):
                     Session = sessionmaker()
                     Session.configure(bind=engine)
                     session = Session()
-                    session.add(Contacts("example_from_user_id", "example_to_user_id"))  # user_id для примера
-                    session.commit()
+                    contacts = session.query(Contacts).filter_by(username_from=msg['from_user']).all()
+                    contacts_list = [x.username_to for x in contacts]
+                    if to_user not in contacts_list:
+                        Session = sessionmaker()
+                        Session.configure(bind=engine)
+                        session = Session()
+                        session.add(Contacts(from_user, to_user))
+                        session.commit()
                     for k, v in self.clients_online.items():
                         if v == to_user:
                             k.send(pickle.dumps(msg))
@@ -230,7 +243,7 @@ class Server(Socket):
 
 
     def client_authenticate_new(self, msg, user, resp):
-        if not self.clients_online.get(user):
+        if msg['user']['account_name'] not in self.clients_online.values():
             self.clients_online[user] = msg['user']['account_name']
             resp['response'], resp['resp_msg'], = '200', 'Авторизация прошла успешно'
             Session = sessionmaker(bind=engine)
@@ -243,9 +256,10 @@ class Server(Socket):
             # self.logger.warning(f'Ошибка авторизации. Повторная авторизация пользователя {user}')
         return resp
 
+
     def client_authenticate_old(self, msg, user, resp):
-        print('client_authenticate_old')
-        if not self.clients_online.get(user):
+        if msg['user']['account_name'] not in self.clients_online.values():
+            self.clients_online[user] = msg['user']['account_name']
             Session = sessionmaker(bind=engine)
             session = Session()
             password = (session.query(User).filter_by(nickname=msg['user']['account_name']).first()).password
@@ -259,29 +273,51 @@ class Server(Socket):
             # self.logger.warning(f'Ошибка авторизации. Повторная авторизация пользователя {user}')
         return resp
 
+
     def client_available_commands(self, resp):
         resp['response'] = '200'
         resp['resp_msg'] = 'Доступные комманды:\n/quit - выход\n' \
                                '/users - список пользователей\n' \
-                               '/contacts - список Ваших контактов\nдля отправки сообщения конкретному\n' \
-                               ' пользователю\nиспользуйте конструкцию ::::@USER_NAME YOUR_MESSAGE'
+                               '/contacts - список Ваших контактов\nдля отправки сообщения конкретному' \
+                               ' пользователю используйте конструкцию ::::@USER_NAME YOUR_MESSAGE\n' \
+                               'для удаления пользователя из списка контактов используйте конструкцию /del USER_NAME\n'
+
         return resp
+
 
     def client_available_users(self, resp):
         resp['response'] = '200'
         resp['resp_msg'] = f'Пользователи в сети: {list(self.clients_online.values())}'
         return resp
 
-    def client_contacts(self, resp):
+
+    def client_contacts(self, resp, cur_user):
+        print(self.clients_online)
+        request_from_user = self.clients_online[cur_user]
+        print(request_from_user)
         Session = sessionmaker()
         Session.configure(bind=engine)
         session = Session()
-        users = session.query(User).all()
-        contacts = [x.nickname for x in users]
+        users = session.query(Contacts).filter_by(username_from=request_from_user).all()
+        contacts = [x.username_to for x in users]
         resp['response'] = '200'
         resp['resp_msg'] = f'Ваши контакты: {contacts}'
-        # resp['resp_msg'] = f'Ваши контакты: {users}'
         return resp
+
+
+    def client_delete_contact(self, msg, resp, cur_user):
+        request_from_user = self.clients_online[cur_user]
+        deleting_contact = msg['action'][5:].split().pop(0)
+        Session = sessionmaker()
+        Session.configure(bind=engine)
+        session = Session()
+        deleting_record = session.query(Contacts).filter_by(username_from=request_from_user, username_to=deleting_contact).first()
+        session.delete(deleting_record)
+        session.commit()
+        resp['response'] = '200'
+        resp['resp_msg'] = f'Пользователь {deleting_contact} удален из контактов'
+        return resp
+
 
 if __name__ == '__main__':
     print("Версия SQLAlchemy:", sqlalchemy.__version__)
